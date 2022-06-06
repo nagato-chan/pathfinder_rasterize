@@ -13,10 +13,11 @@ pathfinder_gpu = { git = "https://github.com/servo/pathfinder" }
 pathfinder_canvas = { git = "https://github.com/servo/pathfinder" }
 pathfinder_renderer = { git = "https://github.com/servo/pathfinder" }
 pathfinder_resources = { git = "https://github.com/servo/pathfinder" }
-pdf_font = { git = "https://github.com/pdf-rs/font", package="font" }
+pdf_font = { git = "https://github.com/pdf-rs/font", package = "font" }
 gl = "*"
-image = "*"
-khronos-egl = { version = "*", features = ["static"] }
+image = "0.24.2"
+khronos-egl = { version = "*", features = ["dynamic"] }
+libloading = "0.7.3"
 
 [dev-dependencies]
 image = "*"
