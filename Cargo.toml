@@ -14,12 +14,16 @@ pathfinder_canvas = { git = "https://github.com/servo/pathfinder" }
 pathfinder_renderer = { git = "https://github.com/servo/pathfinder" }
 pathfinder_resources = { git = "https://github.com/servo/pathfinder" }
 pdf_font = { git = "https://github.com/pdf-rs/font", package = "font" }
-gl = "*"
+# gl = "*"
 image = "0.24.2"
 khronos-egl = { version = "*", features = ["dynamic"] }
 libloading = "0.7.3"
+log = "0.4.17"
 
 [dev-dependencies]
 image = "*"
 pathfinder_svg = { git = "https://github.com/servo/pathfinder" }
 usvg = "*"
+[build-dependencies]
+gl_generator = "0.14"
+cfg_aliases = "0.1.0"

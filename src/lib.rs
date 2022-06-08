@@ -1,3 +1,9 @@
+#[macro_use]
+extern crate log;
+use egl::Api;
+use egl::Instance;
+use image::RgbaImage;
+use khronos_egl as egl;
 use libloading::Library;
 use pathfinder_color::ColorF;
 use pathfinder_geometry::{
@@ -18,12 +24,15 @@ use pathfinder_renderer::{
 };
 use pathfinder_resources::embedded::EmbeddedResourceLoader;
 
-use egl::Instance;
-use image::RgbaImage;
-use khronos_egl as egl;
-
+mod gl {
+    include!(concat!(env!("OUT_DIR"), "/gl_bindings.rs"));
+}
+#[cfg(not(target_os = "android"))]
+pub(crate) use crate::gl::Gl;
+#[cfg(target_os = "android")]
+pub(crate) use crate::gl::Gles2 as Gl;
 pub struct Rasterizer {
-    egl: Instance<egl::Dynamic<Library, egl::EGL1_3>>,
+    egl: Instance<egl::Dynamic<Library, egl::EGL1_5>>,
     display: egl::Display,
     surface: egl::Surface,
     context: egl::Context,
@@ -36,16 +45,14 @@ impl Rasterizer {
         Rasterizer::new_with_level(RendererLevel::D3D9)
     }
     pub fn new_with_level(render_level: RendererLevel) -> Self {
-        // let lib =
-        //     unsafe { libloading::Library::new("libEGL.so").expect("cannot locate libEGL.so") };
-        // let egl = egl::Instance::new(egl::Static);
         let egl = unsafe {
-            egl::DynamicInstance::<egl::EGL1_3>::load_required_from_filename("libEGL.so")
-                .expect("unable to load libEGL.so")
+            // CHANGED
+            egl::DynamicInstance::<egl::EGL1_5>::load_required().expect("unable to load libEGL.so")
         };
+
         let display = egl.get_display(egl::DEFAULT_DISPLAY).expect("display");
         let (major, minor) = egl.initialize(display).expect("init");
-
+        debug!("egl version: {}", egl.version());
         let attrib_list = [
             egl::SURFACE_TYPE,
             egl::PBUFFER_BIT,
@@ -58,32 +65,44 @@ impl Rasterizer {
             egl::DEPTH_SIZE,
             8,
             egl::RENDERABLE_TYPE,
-            egl::OPENGL_BIT,
+            // CONDITION CHANGE
+            egl::OPENGL_ES3_BIT,
             egl::NONE,
         ];
 
         let config = egl
             .choose_first_config(display, &attrib_list)
-            .unwrap()
-            .unwrap();
-
+            .expect("unable to choose config")
+            .expect("unable to get first config");
+        info!("config: {:?}", config);
         let pbuffer_attrib_list = [egl::NONE];
         let surface = egl
             .create_pbuffer_surface(display, config, &pbuffer_attrib_list)
-            .unwrap();
+            .expect("cannot create surface");
 
-        egl.bind_api(egl::OPENGL_API)
+        egl.bind_api(egl::OPENGL_ES_API)
             .expect("unable to select OpenGL API");
 
         let context = egl
-            .create_context(display, config, None, &[egl::NONE])
-            .unwrap();
+            .create_context(
+                display,
+                config,
+                None,
+                &[egl::CONTEXT_CLIENT_VERSION, 3, egl::NONE],
+            )
+            .expect("cannot create context");
+
         egl.make_current(display, Some(surface), Some(surface), Some(context))
-            .unwrap();
+            .expect("cannot set up current");
+        info!("Setting Up OpenGL");
+        // Setup Open GL
 
-        // Setup Open GL.
-        gl::load_with(|name| egl.get_proc_address(name).unwrap() as *const std::ffi::c_void);
-
+        Gl::load_with(|name| {
+            trace!("{:?}", name);
+            egl.get_proc_address(name)
+                .expect("failed to create a process") as *const std::ffi::c_void
+        });
+        info!("Finished Loading");
         Rasterizer {
             egl,
             display,
@@ -106,6 +125,7 @@ impl Rasterizer {
     }
 
     fn renderer_for_size(&mut self, size: Vector2I) -> &mut Renderer<GLDevice> {
+        info!("check renderer");
         let level = self.render_level;
         let size = Vector2I::new((size.x() + 15) & !15, (size.y() + 15) & !15);
         let (ref mut renderer, ref mut current_size) = *self.renderer.get_or_insert_with(|| {
@@ -116,9 +136,11 @@ impl Rasterizer {
                 RendererLevel::D3D11 => GLVersion::GL4,
             };
 
+            info!("get gl device");
             let device = GLDevice::new(renderer_gl_version, 0);
-
+            info!("creating texture");
             let tex = device.create_texture(TextureFormat::RGBA8, size);
+            info!("creating framebuffer");
             let fb = device.create_framebuffer(tex);
             let dest = DestFramebuffer::Other(fb);
             let render_options = RendererOptions {
@@ -126,6 +148,7 @@ impl Rasterizer {
                 background_color: None,
                 show_debug_ui: false,
             };
+            info!("setting up renderer");
             let renderer = Renderer::new(
                 device,
                 &resource_loader,
@@ -152,7 +175,7 @@ impl Rasterizer {
         let view_box = dbg!(scene.view_box());
         let size = view_box.size().ceil().to_i32();
         let transform = Transform2F::from_translation(-view_box.origin());
-
+        info!("initialize rendering");
         let renderer = self.renderer_for_size(size);
         renderer.options_mut().background_color = background;
         scene.set_view_box(RectF::new(Vector2F::zero(), view_box.size()));
@@ -164,20 +187,21 @@ impl Rasterizer {
         };
 
         scene.build_and_render(renderer, options, RayonExecutor);
-
+        // panic!()
         let render_target = match renderer.options().dest {
             DestFramebuffer::Other(ref fb) => RenderTarget::Framebuffer(fb),
-            _ => panic!(),
+            _ => todo!(),
         };
         let texture_data_receiver = renderer
             .device()
             .read_pixels(&render_target, RectI::new(Vector2I::zero(), size));
         let pixels = match renderer.device().recv_texture_data(&texture_data_receiver) {
             TextureData::U8(pixels) => pixels,
-            _ => panic!("Unexpected pixel format for default framebuffer!"),
+            _ => todo!("Unexpected pixel format for default framebuffer!"),
         };
 
-        RgbaImage::from_raw(size.x() as u32, size.y() as u32, pixels).unwrap()
+        RgbaImage::from_raw(size.x() as u32, size.y() as u32, pixels)
+            .expect("cannot transform into image")
     }
 }
 
