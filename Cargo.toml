@@ -19,6 +19,7 @@ image = "0.24.2"
 khronos-egl = { version = "*", features = ["dynamic"] }
 libloading = "0.7.3"
 log = "0.4.17"
+surfman = "0.4.3"
 
 [dev-dependencies]
 image = "*"

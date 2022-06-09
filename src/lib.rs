@@ -1,9 +1,11 @@
 #[macro_use]
 extern crate log;
+
 use egl::Api;
 use egl::Instance;
 use image::RgbaImage;
 use khronos_egl as egl;
+use khronos_egl::COLORSPACE_sRGB;
 use libloading::Library;
 use pathfinder_color::ColorF;
 use pathfinder_geometry::{
@@ -23,6 +25,9 @@ use pathfinder_renderer::{
     scene::Scene,
 };
 use pathfinder_resources::embedded::EmbeddedResourceLoader;
+use std::thread::sleep;
+use std::time::Duration;
+use surfman::{Connection, ContextAttributeFlags, ContextAttributes, GLVersion as SGLVersion};
 
 mod gl {
     include!(concat!(env!("OUT_DIR"), "/gl_bindings.rs"));
@@ -125,7 +130,30 @@ impl Rasterizer {
     }
 
     fn renderer_for_size(&mut self, size: Vector2I) -> &mut Renderer<GLDevice> {
+        // let conn = Connection::new().unwrap();
+        // let adapter = conn.create_adapter().unwrap();
+        // let mut dev = conn.create_device(&adapter).unwrap();
+        // let attr = ContextAttributes {
+        //     version: SGLVersion::new(3, 0),
+        //     flags: ContextAttributeFlags::ALPHA,
+        // };
+        // info!("{:?}", dev.gl_api());
+        // let ctx = unsafe {
+        //     dev.create_context_from_native_context(surfman::NativeContext {
+        //         egl_context: self.context.as_ptr(),
+        //         egl_read_surface: self.surface.as_ptr(),
+        //         egl_draw_surface: self.surface.as_ptr(),
+        //     })
+        //     .unwrap()
+        // };
+        // let fb = dev
+        //     .context_surface_info(&ctx)
+        //     .unwrap()
+        //     .unwrap()
+        //     .framebuffer_object;
+
         info!("check renderer");
+
         let level = self.render_level;
         let size = Vector2I::new((size.x() + 15) & !15, (size.y() + 15) & !15);
         let (ref mut renderer, ref mut current_size) = *self.renderer.get_or_insert_with(|| {
@@ -137,6 +165,8 @@ impl Rasterizer {
             };
 
             info!("get gl device");
+            sleep(Duration::from_secs(5));
+            info!("getting..");
             let device = GLDevice::new(renderer_gl_version, 0);
             info!("creating texture");
             let tex = device.create_texture(TextureFormat::RGBA8, size);
